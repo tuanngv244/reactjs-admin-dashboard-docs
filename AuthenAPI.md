@@ -1,14 +1,22 @@
 # Authentication API flow
 
-## AuthContext
+## Handle with Redux
 
 - state `profile` dùng để lưu trữ thông tin profile của account, truyền qua các component trong context sử dung5
-- `handleLogin`:
-  - Gọi API login với payload tương ứng (xem Swagger)
-  - Gọi api thành công
-    - Lưu JWT token vào localStorage hoặc cookies
-    - Gọi handleGetProfile để lấy thông tin profile
-    - Thông báo thành công và đóng modal
+- `_onLogin`:
+  - Dispatch một side effect action function `handleLogin`.
+  - Trong store module auth thêm 1 async thunk function.
+  - Gọi API login với payload tương ứng (xem Swagger).
+  - Gọi API thành công tại handleLogin
+    - Dùng `thunkApi.dispatch` để gọi `handleGetProfile`.
+    - Dùng tokenMethod.set để lưu `accessToken/refreshToken/Id` vào `Cookie`.
+    - Gọi function `onSuccess` ra ngoài.
+  - Gọi API thất bại tại handleLogin
+    - Gọi function `onFailed` ra ngoài.
+    - Return `thunkApi.rejectWithValue`.
+  - Gọi api thành công tại \_onLogin
+    - Dùng hàm `onSuccess` để handle khi gọi thành công.
+    - Navigate đến trang dashboard.
   - Gọi api thất bại
     - Thông báo thất bại
   - Kết thúc gọi API => gọi callback được truyền vào. Mục đích clear loading,...
