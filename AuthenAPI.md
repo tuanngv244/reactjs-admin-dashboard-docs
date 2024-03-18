@@ -1,7 +1,152 @@
 # Authentication API flow
 
-## Handle with Redux
+- Dựng redux cho phần auth
+- Xử lý function `_onLogin` để đăng nhập
+- Xử lý function `handleGetProfile` để lấy thông tin user
 
+## Dựng redux cho phần auth
+
+- Trong folder store/modules/auth tạo file index.ts
+- Define type `AuthState` và `initialState`.
+- Tạo slice bằng `createSlice` cho auth.
+- Xuất `authActions` và `authReducer` để bên ngoài có thể sử dụng.
+
+```tsx
+type AuthState = {
+  profile?: IUser;
+  loading: {
+    getProfile: boolean;
+  };
+};
+
+const initialState: AuthState = {
+  loading: {
+    getProfile: false,
+  },
+};
+
+const { actions, reducer: authReducer } = createSlice({
+  name: "auth",
+  initialState,
+  reducers: {
+    reset() {
+      return initialState;
+    },
+  },
+  extraReducers: (builder) => {},
+});
+
+const authActions = { ...actions };
+export { authActions, authReducer };
+```
+
+## Xử lý hàm `_onLogin` để đăng nhập.
+
+- Tạo hàm `createAsyncThunk` để handle action side effects.
+- Function `handleLogin` nhận vào payload là data có type là `ILoginFormData`.
+- Function `handleLogin` cũng nhận thêm 2 tham số là function `onSuccess` và `onFailed`.
+- Nếu gọi `login` thành công lấy `token` và `id` lưu vào Cookie với `tokenMethod.set({...})`.
+- Sử dụng `thunkApi.dispatch(handleGetProfile(id))` để lấy thông tin user sau đăng nhập.
+- Gọi function `onSuccess` nếu `login` thành công và function `onFailed` nếu gọi thất bại.
+
+```tsx
+...
+
+export const handleLogin = createAsyncThunk(
+  "auth/login",
+  async (
+    args: {
+      payload: ILoginFormData;
+      onSuccess?: VoidFunction;
+      onFailed?: VoidFunction;
+    },
+    thunkApi
+  ) => {
+    const { payload, onSuccess, onFailed } = args;
+    try {
+      const res = await authService.login(payload);
+      const { id, token } = res?.data || {};
+      thunkApi.dispatch(handleGetProfile(id));
+      tokenMethod.set({
+        id: id,
+        accessToken: token,
+        refreshToken: token,
+        countRefreshToken: 0,
+      });
+      onSuccess?.();
+      return res?.data;
+    } catch (error) {
+      onFailed?.();
+      return thunkApi.rejectWithValue(error);
+    }
+  }
+);
+
+...
+
+const authActions = { ...actions, };
+export { authActions, authReducer };
+```
+
+## Xử lý function `handleGetProfile` để lấy thông tin user
+
+- Tạo hàm `createAsyncThunk` để handle action side effects.
+- Function `handleGetProfile` nhận vào id để gọi api `getProfile`.
+
+```tsx
+...
+
+export const handleGetProfile = createAsyncThunk(
+  "auth/getProfile",
+  async (id: string, thunkApi) => {
+    try {
+      const profileRes = await authService.getProfile(id);
+      return profileRes;
+    } catch (error) {
+      return thunkApi.rejectWithValue(error);
+    }
+  }
+);
+
+...
+
+const authActions = { ...actions, };
+export { authActions, authReducer };
+```
+
+- Dựng `builder` để bắt data và các trạng thái của function `handleGetProfile`.
+- Nếu `fulfilled` lưu thông tin profile vào store.
+
+```tsx
+...
+
+const { actions, reducer: authReducer } = createSlice({
+  name: "auth",
+  initialState,
+  reducers: {
+    reset() {
+      return initialState;
+    },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(handleGetProfile.fulfilled, (state, action) => {
+        state.profile = action.payload;
+        state.loading.getProfile = false;
+      })
+      .addCase(handleGetProfile.pending, (state) => {
+        state.loading.getProfile = true;
+      })
+      .addCase(handleGetProfile.rejected, (state) => {
+        state.loading.getProfile = false;
+      });
+  },
+});
+
+...
+```
+
+<!--
 - state `profile` dùng để lưu trữ thông tin profile của account, truyền qua các component trong context sử dung5
 - `_onLogin`:
   - Dispatch một side effect action function `handleLogin`.
@@ -303,4 +448,4 @@ const RegisterForm = () => {
   };
   //   ...
 };
-```
+``` -->
