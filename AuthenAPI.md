@@ -1,14 +1,19 @@
 # Authentication API flow
 
+Xây dựng luồng Anthentication với Redux toolkit và PrivateRoute xác thực user có quyền.
+
+## 1. Redux auth module
+
 - Dựng redux cho phần auth
 - Xử lý function `_onLogin` để đăng nhập
 - Xử lý function `handleGetProfile` để lấy thông tin user
 
-## Dựng redux cho phần auth
+#### Dựng redux cho phần auth
 
 - Trong folder store/modules/auth tạo file index.ts
-- Define type `AuthState` và `initialState`.
+- Define type `AuthState` và khai báo `initialState`.
 - Tạo slice bằng `createSlice` cho auth.
+- Tạo function `reset` khi muốn reset state về `initialState` của auth module.
 - Xuất `authActions` và `authReducer` để bên ngoài có thể sử dụng.
 
 ```tsx
@@ -40,7 +45,7 @@ const authActions = { ...actions };
 export { authActions, authReducer };
 ```
 
-## Xử lý hàm `_onLogin` để đăng nhập.
+#### Xử lý hàm `_onLogin` để đăng nhập.
 
 - Tạo hàm `createAsyncThunk` để handle action side effects.
 - Function `handleLogin` nhận vào payload là data có type là `ILoginFormData`.
@@ -88,7 +93,7 @@ const authActions = { ...actions, };
 export { authActions, authReducer };
 ```
 
-## Xử lý function `handleGetProfile` để lấy thông tin user
+#### Xử lý function `handleGetProfile` để lấy thông tin user
 
 - Tạo hàm `createAsyncThunk` để handle action side effects.
 - Function `handleGetProfile` nhận vào id để gọi api `getProfile`.
@@ -146,306 +151,209 @@ const { actions, reducer: authReducer } = createSlice({
 ...
 ```
 
-<!--
-- state `profile` dùng để lưu trữ thông tin profile của account, truyền qua các component trong context sử dung5
-- `_onLogin`:
-  - Dispatch một side effect action function `handleLogin`.
-  - Trong store module auth thêm 1 async thunk function.
-  - Gọi API login với payload tương ứng (xem Swagger).
-  - Gọi API thành công tại handleLogin
-    - Dùng `thunkApi.dispatch` để gọi `handleGetProfile`.
-    - Dùng tokenMethod.set để lưu `accessToken/refreshToken/Id` vào `Cookie`.
-    - Gọi function `onSuccess` ra ngoài.
-  - Gọi API thất bại tại handleLogin
-    - Gọi function `onFailed` ra ngoài.
-    - Return `thunkApi.rejectWithValue`.
-  - Gọi api thành công tại \_onLogin
-    - Dùng hàm `onSuccess` để handle khi gọi thành công.
-    - Navigate đến trang dashboard.
-  - Gọi api thất bại
-    - Thông báo thất bại
-  - Kết thúc gọi API => gọi callback được truyền vào. Mục đích clear loading,...
-- `handleRegister`:
-  - Gọi API register với payload tương ứng (xem Swagger)
-  - Gọi api thành công
-    - Kiểm tra data trả về có id của accoung không
-    - Gọi handleLogin đăng nhập và lấy thông tin profile
-  - Gọi api thất bại
-    - Thông báo thất bại
-  - Kết thúc gọi API => gọi callback được truyền vào. Mục đích clear loading,...
-- `handleLogout`: clear token ở localStorage hoặc cookies và clear profile data
-- `handleGetProfile`:
+## 2. Login form page
 
-  - Gọi API getProfile với kèm theo token (xem `authService.getProfile`)
-  - Gọi thành công: thông báo thành công và cập nhật state profile
-  - Gọi thất bại: thông báo thất bại và gọi `handleLogout`
+- Dựng `Authentication` page và config route
+- Xử lý `Login` component
 
-- `handleLogin`: gọi API login với payload tương ứng (xem Swagger)
-- `useEffect`: gọi lần đầu khi khởi chạy context để check token => gọi `handleGetProfile`
-- `handleShowModal`: bổ sung điều kiện, nếu có token sẽ KHÔNG mở modal và ngược lại
+#### Dựng Authentication page và config route
 
-```jsx
-import { authService } from "@/services/authService";
-import tokenMethod from "@/utils/token";
-import { message } from "antd";
-import { createContext, useContext, useEffect, useState } from "react";
+- Tạo page `Authentication` với cấu trúc `pages/Authentication/index.tsx`.
+- Config route với path `/login` cho page `Authentication` trên.
+- Logic kiểm tra sự tồn tại token:
+  - Nếu có token thì sẽ `Navigate` về trang `Dashboard`.
+  - Nếu không có token thì sẽ render component `Login`.
 
-const AuthContext = createContext({});
+```tsx
+/// Authentication page
+const Authentication: React.FC = () => {
+  return !tokenMethod.get() ? <Login /> : <Navigate to={"/"} replace />;
+};
 
-const AuthContextProvider = ({ children }) => {
-  const [showedModal, setShowedModal] = useState("");
-  const [profile, setProfile] = useState();
+export default Authentication;
+```
 
-  const handleShowModal = (modalType) => {
-    if (!!!tokenMethod.get()) {
-      setShowedModal(modalType || "");
-    }
-  };
+```tsx
+/// Config route tại configs/routes.tsx
+...
 
-  const handleCloseModal = (e) => {
-    e?.stopPropagation();
-    setShowedModal("");
-  };
+const Authentication = withLoader(lazy(() => import('../pages/Authentication')));
 
-  useEffect(() => {
-    if (tokenMethod.get()) {
-      // call api get profile
-      handleGetProfile();
-    }
-  }, []);
+...
 
-  const handleLogin = async (loginData, callback) => {
-    // call API
-    try {
-      const res = await authService.login(loginData);
-      const { token: accessToken, refreshToken } = res?.data?.data || {};
+  {
+    path: Paths.ROOT,
+    element: <MainLayout />,
+    children: [
+      {
+        path: Paths.AUTHENTICATION,
+        element: <Authentication />,
+      },
+      ...
+    ]
+  }
+```
 
-      // Lưu vào local storage
-      tokenMethod.set({
-        accessToken,
-        refreshToken,
-      });
+#### Xử lý Login component
 
-      if (!!tokenMethod) {
-        // Lấy thông tin profile
-        handleGetProfile();
-        // Thông báo
-        message.success("Đăng nhập thành công");
+- Dùng `useForm` trong `react-hook-form` để xử lý form login.
+- Tạo type cho form là `ILoginFormData` định nghĩa các trường dữ liệu gửi đi.
+- Dựng form login UI.
 
-        // Đóng modal
-        handleCloseModal();
-      }
-    } catch (error) {
-      console.log("error", error);
-      message.error("Đăng nhập thất bại");
-    } finally {
-      callback?.();
-    }
-  };
+```tsx
+/// Form login UI
+...
+const Login = () => {
 
-  const handleRegister = async (registerData, callback) => {
-    // call API
-    try {
-      const { name, email, password } = registerData;
-      const payload = {
-        firstName: name,
-        lastName: "",
-        email,
-        password,
-      };
-      const res = await authService.register(payload);
-      if (res?.data?.data?.id) {
-        message.success("Đăng ký thành công");
-        handleLogin({
-          email,
-          password,
-        });
-      }
-    } catch (error) {
-      console.log("error", error);
-      if (error?.response?.status === 403) {
-        message.error("Email đăng ký đã tồn tại");
-      } else {
-        message.error("Đăng ký thất bại");
-      }
-    } finally {
-      callback?.();
-    }
-  };
+const { register, handleSubmit } = useForm<ILoginFormData>({});
 
-  const handleLogout = () => {
-    tokenMethod.remove();
-    setProfile(undefined);
-  };
+const _onLogin = async (data: ILoginFormData) =>{}
 
-  const handleGetProfile = async () => {
-    try {
-      const profileRes = await authService.getProfile();
-      if (profileRes?.data?.data) {
-        setProfile(profileRes.data.data);
-      }
-    } catch (error) {
-      console.log("error", error);
-      handleLogout();
-    }
-  };
+<Box
+  sx={{
+  width: "100%",
+  height: "100%",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  }}
+  >
+  <Box
+    sx={{
+    padding: "32px",
+    maxWidth: "400px",
+    }}
+    component="form"
+    onSubmit={handleSubmit(_onLogin)}
+    >
+    <Box sx={{ mb: 5 }}>
+      <Typography variant="h3">{t("login")}</Typography>
+    </Box>
+    <Input placeholder="Email" fullWidth {...register("email")} />
+    <Input
+      type="password"
+      placeholder="Mật khẩu"
+      fullWidth
+      {...register("password")}
+      />
+    <Button fullWidth type="submit">
+      Đăng nhập
+    </Button>
+  </Box>
+</Box>
+};
+export default Login;
+```
+
+- Xử lý function `_onLogin` gọi `dispatch` action `authActions.handleLogin` để gọi API login.
+- Xử lý trạng thái login:
+  - Nếu thành công function `onSuccess` thực thi, dùng `navigate` với path `Paths.ROOT` để vào trang `Dashboard`.
+  - Nếu thất bại bắn một message error thông báo cho người dùng.
+
+```tsx
+const Login = () => {
+  const { register, handleSubmit } = useForm<ILoginFormData>({});
+  const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
+  const { t } = useTranslation();
+
+  // Xử lý function _onLogin
+  const _onLogin = async (data: ILoginFormData) =>
+    await dispatch(
+      authActions.handleLogin({
+        payload: data,
+        onSuccess: () => navigate(Paths.ROOT),
+        onFailed: () => alert("Login failed!"),
+      })
+    );
 
   return (
-    <AuthContext.Provider
-      value={{
-        showedModal,
-        profile,
-        handleShowModal,
-        handleCloseModal,
-        handleLogin,
-        handleLogout,
-        handleRegister,
+    <Box
+      sx={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
       }}
     >
-      {children}
-    </AuthContext.Provider>
+      <Box
+        sx={{
+          padding: "32px",
+          maxWidth: "400px",
+        }}
+        component="form"
+        onSubmit={handleSubmit(_onLogin)}
+      >
+        <Box sx={{ mb: 5 }}>
+          <Typography variant="h3">{t("login")}</Typography>
+        </Box>
+        <Input placeholder="Email" fullWidth {...register("email")} />
+        <Input
+          type="password"
+          placeholder="Mật khẩu"
+          fullWidth
+          {...register("password")}
+        />
+        <Button fullWidth type="submit">
+          Đăng nhập
+        </Button>
+      </Box>
+    </Box>
   );
 };
 
-export default AuthContextProvider;
-
-export const useAuthContext = () => useContext(AuthContext);
+export default Login;
 ```
 
-## authService.getProfile
+## 3. Kiểm tra route với PrivateRoute
 
-- Đối với các API yêu cầu xác thực `(authenticated)` quyền truy cập, chúng ta cần điều chỉnh `request header` để gửi kèm `accessToken`
+- Dựng `PrivateRoute` với cấu trúc folder components/PrivateRoute/index.tsx
+- PrivateRoute nhận 2 props `redirectTo`,`element`:
+  - `redirectTo` dùng để định nghĩa route redirect khi user không có quyền truy cập.
+  - `element` dùng để render route đó khi user có quyền truy cập.
+- Xử lý kiểm tra sự tồn tại của token:
+  - Nếu có token thì sẽ return `element`.
+  - Nếu không có token thì sẽ `Naviagte` đến component có path là `redirectTo`.
 
-```jsx
-import axiosInstance from "@/utils/axiosInstance";
-import tokenMethod from "@/utils/token";
+```tsx
+interface PrivateRouteProps {
+  redirectTo: string;
+  element: React.ReactNode;
+}
 
-export const authService = {
-  //  ...
-  getProfile() {
-    return axiosInstance.get(`/customer/profiles`, {
-      headers: {
-        Authorization: `Bearer ${tokenMethod.get()?.accessToken}`,
+const PrivateRoute: React.FC<PrivateRouteProps> = ({
+  redirectTo = "/authen",
+  element,
+}) => {
+  return tokenMethod.get() ? element : <Navigate to={redirectTo} replace />;
+};
+
+export default PrivateRoute;
+```
+
+- Khai báo PrivateRoute với path `Paths.ROOT` làm cổng chặn mọi route
+  con đều phải đi qua.
+- Route con được khai báo trong `children`.
+
+```tsx
+...
+ {
+    path: Paths.ROOT,
+    element: <MainLayout />,
+    children: [
+      {
+        path: Paths.AUTHENTICATION,
+        element: <Authentication />,
       },
-    });
-  },
-  // ...
-};
+      {
+        path: Paths.ROOT,
+        element: <PrivateRoute redirectTo={Paths.AUTHENTICATION} element={<MenuLayout />} />,
+        children:[
+          ...
+        ]
+      }
+      ...
+    ]
+ }
 ```
-
-## token utils
-
-- tạo helper functions `localToken` để tiện dùng khi xử lý token với localStorage
-- tạo helper functions `cookieToken` để tiện dùng khi xử lý token với cookie. Lưu ý, cần cài đặt lib `js-cookie` để xử lý cookie tốt hơn
-
-```jsx
-// constants/storage.js
-export const STORAGE = {
-  token: "token",
-};
-```
-
-```jsx
-// utils/token.js
-import { STORAGE } from "@/constants/storage";
-import Cookies from "js-cookie";
-
-export const localToken = {
-  get: () => JSON.parse(localStorage.getItem(STORAGE.token)),
-  set: (token) => localStorage.setItem(STORAGE.token, JSON.stringify(token)),
-  remove: () => localStorage.removeItem(STORAGE.token),
-};
-
-export const cookieToken = {
-  get: () =>
-    JSON.parse(
-      Cookies.get(STORAGE.token) !== undefined
-        ? Cookies.get(STORAGE.token)
-        : null
-    ),
-  set: (token) => Cookies.set(STORAGE.token, JSON.stringify(token)),
-  remove: () => Cookies.remove(STORAGE.token),
-};
-
-const tokenMethod = {
-  get: () => {
-    // return localToken.get()
-    return cookieToken.get();
-  },
-  set: (token) => {
-    console.log("token", token);
-    // localToken.set(token)
-    cookieToken.set(token);
-  },
-  remove: () => {
-    // localToken.remove();
-    cookieToken.remove();
-  },
-};
-
-export default tokenMethod;
-```
-
-## LoginForm
-
-- Sau khi `_onSubmit` và validate thành công => gọi `handleLogin` được lấy từ AuthContext, truyền `form data` và `callback` function
-- `callback` function với mục đích clear loading sau khi hoàn thành `handleLogin`
-
-```jsx
-const LoginForm = () => {
-  const { handleLogin } = useAuthContext();
-  const [loading, setLoading] = useState(false);
-
-  const _onSubmit = async (e) => {
-    e.preventDefault();
-    // validation
-    const errObj = {};
-    // ...
-    //end validation
-    if (Object.keys(errObj)?.length > 0) {
-      console.log("Submit error", errObj);
-    } else {
-      console.log("Submit success", form);
-      setLoading(true);
-      handleLogin?.({ ...form }, () => {
-        setTimeout(() => {
-          setLoading(false);
-        }, 300);
-      });
-    }
-  };
-  // ...
-};
-```
-
-## RegisterForm
-
-- Sau khi `_onSubmit` và validate thành công => gọi `handleRegister` được lấy từ AuthContext, truyền `form data` và `callback` function
-- `callback` function với mục đích clear loading sau khi hoàn thành `handleRegister`
-
-```jsx
-const RegisterForm = () => {
-  const { handleRegister } = useAuthContext();
-  const [loading, setLoading] = useState(false);
-
-  const _onSubmit = (e) => {
-    e.preventDefault();
-    // validation
-    const errObj = {};
-    // ...
-    //end validation
-    if (Object.keys(errObj)?.length > 0) {
-      console.log("Submit error", errObj);
-    } else {
-      setLoading(true);
-      console.log("Submit success", form);
-      handleRegister({ ...form }, () => {
-        setTimeout(() => {
-          setLoading(false);
-        }, 300);
-      });
-    }
-  };
-  //   ...
-};
-``` -->
